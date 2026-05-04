@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>R716E LIVE SYNC</title>
+    <style>
+        body { background: #f0f2f5; margin: 0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+        #header { width: 100%; background: #1c2833; color: #2ecc71; padding: 15px; font-weight: bold; text-align: center; border-bottom: 2px solid #2ecc71; }
+        canvas { background: white; margin-top: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 95%; max-width: 800px; border-radius: 4px; }
+        .info { color: #888; font-size: 11px; margin-top: 10px; text-transform: uppercase; letter-spacing: 1px; }
+    </style>
+</head>
+<body>
+    <div id="header">● LIVE SYNC: AM.R716E (SAN JUAN)</div>
+    <canvas id="seismoCanvas"></canvas>
+    <div class="info">3.0 - 20.0 Hz | Data Syncing via ShakeNet</div>
+
+    <script>
+        const canvas = document.getElementById('seismoCanvas');
+        const ctx = canvas.getContext('2d');
+        const ROWS = 10;
+        const B = 400; // Points per line
+        
+        canvas.width = 800; 
+        canvas.height = 1000;
+        
+        let history = Array.from({ length: ROWS }, () => new Array(B).fill(0));
+        let r_idx = 0;
+        let c_idx = 0;
+
+        async function syncData() {
+            try {
+                // Using corsproxy.io to make sure the data flows to your website
+                const url = `https://corsproxy.io/?https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404`;
+                const res = await fetch(url);
+                const txt = await res.text();
+                const lines = txt.trim().split('\n');
+                const val = parseFloat(lines[lines.length - 1]);
+
+                if (!isNaN(val)) {
+                    history[r_idx][c_idx] = val;
+                    c_idx++;
+
+                    // If line is full, jump to new line
+                    if (c_idx >= B) {
+                        c_idx = 0;
+                        r_idx = (r_idx + 1) % ROWS;
+                        history[r_idx].fill(0); // Clear the line we just jumped to
+                    }
+                }
+            } catch (e) {
+                console.log("Syncing...");
+            }
+            setTimeout(syncData, 50); // Fast sync for "Solid Liquid" look
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let rh = canvas.height / ROWS;
+
+            for (let r = 0; r < ROWS; r++) {
+                let cy = (r * rh) + (rh / 2);
+                
+                // Draw Grid Line
+                ctx.strokeStyle = "#f0f0f0";
+                ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
+
+                // Draw Solid Liquid
+                ctx.fillStyle = "#1c2833";
+                for (let i = 0; i < B; i++) {
+                    if (r === r_idx && i > c_idx) break;
+
+                    let x = i * (canvas.width / B);
+                    let val = history[r][i];
+                    let h = (val / 1500) * (rh * 0.4); // Scale for high fidelity
+
+                    // Draw the vertical mass (Solid Ink)
+                    ctx.fillRect(x, cy - Math.abs(h), 2, Math.abs(h) * 2);
+                }
+            }
+            requestAnimationFrame(draw);
+        }
+
+        syncData();
+        draw();
+    </script>
+</body>
+</html>
