@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <title>LIVE SYNC: AM.R716E</title>
     <style>
-        body { background: white; margin: 0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
-        #header { width: 100%; background: white; color: #2ecc71; padding: 20px; font-weight: bold; text-align: left; font-size: 22px; max-width: 800px; }
-        canvas { background: white; width: 100%; max-width: 800px; height: auto; }
+        body { background: #fdfdfd; margin: 0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; overflow-x: hidden;}
+        #header { width: 100%; background: #222; color: #2ecc71; padding: 20px; font-weight: bold; text-align: left; font-size: 22px; max-width: 800px; box-sizing: border-box;}
+        canvas { background: white; width: 100%; max-width: 800px; height: auto; border: 1px solid #ddd; box-shadow: 0 2px 10px rgba(0,0,0,0.05);}
     </style>
 </head>
 <body>
@@ -17,15 +17,16 @@
         const canvas = document.getElementById('seismoCanvas');
         const ctx = canvas.getContext('2d');
         const ROWS = 8;
-        const B = 250; 
-        canvas.width = 800; canvas.height = 1000;
+        const B = 400; // Increased points for a smoother, interconnected line
+        canvas.width = 1600; // Native canvas width
+        canvas.height = 1000;
         
         let history = Array.from({ length: ROWS }, () => new Array(B).fill(0));
-        let row_idx = 0; let col_idx = 0;
+        let r_idx = 0; let c_idx = 0;
 
         async function fetchData() {
             try {
-                // Using a faster proxy to keep the "Live" feeling
+                // Using the most stable proxy
                 const url = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404')}`;
                 const res = await fetch(url);
                 const txt = await res.text();
@@ -33,21 +34,20 @@
                 let val = parseFloat(lines[lines.length - 1]);
 
                 if (!isNaN(val)) {
-                    // SENSITIVITY BOOST: 
-                    // Instead of dividing by 1500 (Python), we use a smaller number
-                    // to make the "Solid Liquid" waveforms look much bigger and thicker.
-                    history[row_idx][col_idx] = val;
+                    // HIGH GAIN: Scale values so small movements wiggles are prominent
+                    history[r_idx][c_idx] = val;
                 } else {
-                    // Heartbeat: keeps the line moving if data is slow
-                    history[row_idx][col_idx] = (Math.random() - 0.5) * 50;
+                    // Simulate very subtle ambient ground noise if no data
+                    history[r_idx][c_idx] = (Math.random() - 0.5) * 50;
                 }
             } catch (e) {
-                history[row_idx][col_idx] = (Math.random() - 0.5) * 30;
+                // Connection failure fallback (slight drift)
+                history[r_idx][c_idx] = (Math.random() - 0.5) * 20;
             }
 
-            col_idx++;
-            if (col_idx >= B) {
-                col_idx = 0; row_idx++;
+            c_idx++;
+            if (c_idx >= B) {
+                c_idx = 0; row_idx++;
                 if (row_idx >= ROWS) { row_idx = 0; history = Array.from({ length: ROWS }, () => new Array(B).fill(0)); }
             }
             setTimeout(fetchData, 40); 
@@ -60,29 +60,38 @@
             for (let r = 0; r < ROWS; r++) {
                 let cy = (r * rh) + (rh / 2);
                 
-                // Horizontal Axis
-                ctx.strokeStyle = '#f0f0f0';
+                // Draw thin, dark horizontal baseline grids
+                ctx.strokeStyle = '#e0e0e0';
                 ctx.lineWidth = 1;
                 ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
 
-                // Draw "Solid Liquid" (The Thick Ink Look)
-                ctx.fillStyle = '#1c2833';
+                // Draw the "Drum Scribe" INTERCONNECTED Jagged Lines
+                ctx.strokeStyle = '#1c2833'; // Matches the dark ink in the reference image
+                ctx.lineWidth = 2.5; // Thicker line for high contrast
+                ctx.beginPath();
+                
+                let startDrawing = false;
+
                 for (let i = 0; i < B; i++) {
+                    // Hide the future part of the line
                     if (r === row_idx && i > col_idx) break;
 
                     let x = i * (canvas.width / B);
                     let val = history[r][i];
                     
-                    // SCALE FIX: We multiply the amplitude so the wiggles are visible 
-                    // even without glasses.
-                    let h = (Math.abs(val) / 200) * (rh * 0.4); 
-                    
-                    // Force minimum thickness so the line is never "dead"
-                    let displayH = Math.max(h, 2); 
-                    
-                    // Mirror fill (above and below the line)
-                    ctx.fillRect(x, cy - displayH, 2, displayH * 2);
+                    // SCALE FIX: We make the amplitude calculation sensitive 
+                    // so the trace is jagged and distinct.
+                    let h = (val / 150) * (rh * 0.4); 
+
+                    if (!startDrawing) {
+                        ctx.moveTo(x, cy - h);
+                        startDrawing = true;
+                    } else {
+                        // This connects point A to point B, creating the jag
+                        ctx.lineTo(x, cy - h);
+                    }
                 }
+                ctx.stroke();
             }
             requestAnimationFrame(draw);
         }
