@@ -1,103 +1,128 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>PH-EEW | SHAKENET LIVE</title>
+    <title>EARTHQUAKE VIEWER WEB | AUDIO ACTIVE</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: monospace; }
-        #map { position: absolute; width: 100%; height: 100%; filter: grayscale(1) invert(1) brightness(0.4); z-index: 1; }
-        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; border: 2px solid #00ffcc; }
-        #header { background: rgba(0,0,0,0.9); color: #00ffcc; padding: 12px; border-bottom: 2px solid #00ffcc; }
-        
-        /* Epicenter Star */
-        .epicenter-star { color: #ff0000; font-size: 55px; text-shadow: 0 0 20px red; transform: translate(-50%, -50%); animation: flash 0.4s infinite; }
-        @keyframes flash { 0% { scale: 1.2; opacity: 1; } 50% { scale: 0.8; opacity: 0.4; } 100% { scale: 1.2; opacity: 1; } }
-        
-        #data-log { position: absolute; bottom: 10px; left: 10px; color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.7); padding: 5px; }
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: 'Inter', sans-serif; }
+        #map { position: absolute; width: 100%; height: 100%; z-index: 1; background: #0b1621; }
+        .leaflet-layer { filter: invert(1) hue-rotate(180deg) brightness(0.4) contrast(1.2); }
+
+        #ui-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; pointer-events: none; border: 1px solid rgba(0, 255, 204, 0.3); box-sizing: border-box; }
+        #top-bar { background: rgba(0, 0, 0, 0.85); color: #00ffcc; padding: 10px 20px; border-bottom: 2px solid #00ffcc; font-size: 14px; display: flex; justify-content: space-between; pointer-events: auto; }
+
+        /* Epicenter Star Animation */
+        .epicenter-star { color: #ff0000; font-size: 55px; text-shadow: 0 0 25px red; position: absolute; transform: translate(-50%, -50%); animation: pulse-star 0.4s infinite; z-index: 2000; }
+        @keyframes pulse-star { 0% { transform: translate(-50%, -50%) scale(1); opacity: 1; } 50% { transform: translate(-50%, -50%) scale(1.3); opacity: 0.6; } 100% { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+
+        #alert-panel {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(255, 0, 0, 0.9); color: white; padding: 20px;
+            font-weight: bold; font-size: 24px; text-align: center;
+            border: 5px solid white; display: none; z-index: 3000;
+        }
     </style>
 </head>
 <body>
 
 <div id="map"></div>
-<script async src="https://maps.googleapis.com/maps/api/js?key=DEVELOPMENT_ONLY&callback=initMap"></script>
-
-<div id="ui">
-    <div id="header">● PH-REQV | SHAKENET CONNECTED | STATION: AM.R716E</div>
-    <div id="data-log">FETCHING REAL-TIME DATA...</div>
+<div id="ui-frame">
+    <div id="top-bar">
+        <span>● EARTHQUAKE VIEWER | PHILIPPINES</span>
+        <span id="live-clock">00:00:00</span>
+    </div>
+    <div id="alert-panel" id="visual-alert">EARTHQUAKE WARNING<br>EXPECT SHAKING SOON</div>
 </div>
 
-<script>
-    let map;
-    let lastValue = 0;
-    const MY_STATION = "R716E";
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    // 1. SHAKENET LIVE CONNECTION
-    async function fetchLiveSeismic() {
+<script>
+    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([12.879, 121.774], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const TARGET_STA = "R716E";
+
+    // --- EEW SOUND ENGINE ---
+    function playEEWSound() {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+
+        osc.type = 'triangle'; // Smooth but urgent tone
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // High A note
+        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.5); // Slide down
+
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.5);
+    }
+
+    async function streamData() {
         const proxy = "https://api.allorigins.win/raw?url=";
-        const target = `https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=${MY_STATION}&loc=00&cha=SHZ&format=ascii&nodata=404`;
+        const api = `https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=${TARGET_STA}&loc=00&cha=SHZ&format=ascii&nodata=404`;
         
         try {
-            const response = await fetch(proxy + encodeURIComponent(target));
-            const text = await response.text();
-            const lines = text.trim().split('\n');
-            const newestVal = parseFloat(lines[lines.length - 1]);
+            const res = await fetch(proxy + encodeURIComponent(api));
+            const data = await res.text();
+            const lastVal = parseFloat(data.trim().split('\n').pop());
             
-            if (!isNaN(newestVal)) {
-                lastValue = newestVal;
-                document.getElementById('data-log').innerText = `LIVE STREAM: AM.${MY_STATION} | VAL: ${newestVal.toFixed(0)}`;
-                
-                // TRIGGER LOGIC: If a sudden spike > 5000 is detected
-                if (Math.abs(newestVal) > 5000) {
-                    triggerAlert(14.601, 121.033); // Trigger at San Juan coords
-                }
+            if(!isNaN(lastVal) && Math.abs(lastVal) > 4000) {
+                executeWarning(14.601, 121.033);
             }
-        } catch (e) {
-            document.getElementById('data-log').innerText = "CONNECTION ERROR: SHAKENET TIMEOUT";
-        }
-        setTimeout(fetchLiveSeismic, 500); // Check every half second
+        } catch (e) { }
+        
+        document.getElementById('live-clock').innerText = new Date().toLocaleTimeString();
+        setTimeout(streamData, 1000);
     }
 
-    // 2. MAP & VISUALS
-    function initMap() {
-        map = new google.maps.Map(document.getElementById("map"), {
-            zoom: 7, center: { lat: 12.879, lng: 121.774 },
-            disableDefaultUI: true, styles: [{ "stylers": [{ "invert_lightness": true }] }]
-        });
-        fetchLiveSeismic();
-    }
+    let isAlerting = false;
+    function executeWarning(lat, lng) {
+        if (isAlerting) return;
+        isAlerting = true;
 
-    function triggerAlert(lat, lng) {
-        // Show Star
-        const star = new google.maps.OverlayView();
-        star.onAdd = function() {
-            const div = document.createElement('div');
-            div.className = 'epicenter-star';
-            div.innerHTML = '★';
-            div.style.position = 'absolute';
-            this.getPanes().overlayLayer.appendChild(div);
-            this.div = div;
-        };
-        star.draw = function() {
-            const pos = this.getProjection().fromLatLngToDivPixel(new google.maps.LatLng(lat, lng));
-            this.div.style.left = pos.x + 'px';
-            this.div.style.top = pos.y + 'px';
-        };
-        star.setMap(map);
-        setTimeout(() => star.setMap(null), 10000);
+        // Visual Alert
+        const panel = document.getElementById('alert-panel');
+        panel.style.display = 'block';
 
-        // Expand P-Wave
-        let r = 0;
-        const circle = new google.maps.Circle({
-            map: map, center: { lat: lat, lng: lng },
-            strokeColor: "#00ffcc", strokeOpacity: 0.8, strokeWeight: 3,
-            fillColor: "#00ffcc", fillOpacity: 0.1, radius: 0
-        });
+        // Play Sound 3 times (Pulse)
+        let count = 0;
+        const soundLoop = setInterval(() => {
+            playEEWSound();
+            count++;
+            if (count >= 6) clearInterval(soundLoop);
+        }, 600);
 
-        const anim = setInterval(() => {
-            r += 7000;
-            circle.setRadius(r);
-            if (r > 600000) { clearInterval(anim); circle.setMap(null); }
+        // Marker & Waves
+        const starIcon = L.divIcon({ className: '', html: "<div class='epicenter-star'>★</div>", iconSize: [0, 0] });
+        const starMarker = L.marker([lat, lng], {icon: starIcon}).addTo(map);
+        const pWave = L.circle([lat, lng], { color: '#00ffcc', weight: 2, radius: 0 }).addTo(map);
+        const sWave = L.circle([lat, lng], { color: '#ff0000', weight: 3, radius: 0 }).addTo(map);
+
+        let pR = 0; let sR = 0;
+        const expansion = setInterval(() => {
+            pR += 6500; sR += 3400;
+            pWave.setRadius(pR); sWave.setRadius(sR);
+
+            if (pR > 700000) {
+                map.removeLayer(pWave); map.removeLayer(sWave); map.removeLayer(starMarker);
+                panel.style.display = 'none';
+                isAlerting = false;
+                clearInterval(expansion);
+            }
         }, 100);
     }
+
+    // Interaction required for audio on mobile
+    window.addEventListener('click', () => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    }, { once: true });
+
+    streamData();
 </script>
 </body>
 </html>
