@@ -1,15 +1,15 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>EARTHQUAKE VIEWER | STABLE</title>
+    <title>PH-EEW | MONITOR STABLE</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: 'Inter', sans-serif; }
         #map { position: absolute; width: 100%; height: 100%; z-index: 1; background: #0b1621; }
         
-        /* FIXED: Lightened the map while keeping the "Hacker" look */
+        /* ADJUSTED: Brightened map and fixed contrast for visibility */
         .leaflet-layer { 
-            filter: invert(1) hue-rotate(180deg) brightness(0.7) contrast(1.1); 
+            filter: invert(100%) hue-rotate(180deg) brightness(1.2) contrast(0.8); 
         }
 
         #ui-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; pointer-events: none; border: 2px solid #00ffcc; box-sizing: border-box; }
@@ -17,8 +17,23 @@
         
         #audio-btn { background: #00ffcc; color: black; border: none; padding: 5px 12px; font-weight: bold; cursor: pointer; border-radius: 4px; }
 
-        /* Pulsing Epicenter Star */
-        .epicenter-star { color: #ff0000; font-size: 50px; text-shadow: 0 0 20px red; position: absolute; transform: translate(-50%, -50%); animation: flash 0.4s infinite; }
+        /* Station Pulse Animation */
+        .station-dot {
+            background: #00ffcc;
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            border: 2px solid #fff;
+            box-shadow: 0 0 10px #00ffcc;
+            animation: station-pulse 2s infinite;
+        }
+        @keyframes station-pulse {
+            0% { box-shadow: 0 0 0px #00ffcc; }
+            50% { box-shadow: 0 0 15px #00ffcc; }
+            100% { box-shadow: 0 0 0px #00ffcc; }
+        }
+
+        /* Epicenter Star */
+        .epicenter-star { color: #ff0000; font-size: 50px; text-shadow: 0 0 20px red; position: absolute; transform: translate(-50%, -50%); animation: flash 0.4s infinite; z-index: 2000; }
         @keyframes flash { 0% { scale: 1.2; } 50% { scale: 0.8; } 100% { scale: 1.2; } }
 
         #alert-panel { 
@@ -45,10 +60,11 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([12.879, 121.774], 6);
+    // Initialize Map
+    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([14.6, 121.0], 8);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    // THE STATION DOTS (Backbone Sensors)
+    // Station Data
     const stations = [
         { id: "R716E", lat: 14.601, lng: 121.033 }, // San Juan
         { id: "R4433", lat: 13.756, lng: 121.058 }, // Batangas
@@ -57,10 +73,14 @@
         { id: "RE8A8", lat: 8.454, lng: 124.631 }   // CDO
     ];
 
+    // Add Pulsing Dots for each station
     stations.forEach(s => {
-        L.circleMarker([s.lat, s.lng], {
-            radius: 4, fillColor: "#00ffcc", color: "#fff", weight: 1, fillOpacity: 1
-        }).addTo(map).bindTooltip(s.id);
+        const dotIcon = L.divIcon({
+            className: 'station-dot',
+            iconSize: [12, 12],
+            iconAnchor: [6, 6]
+        });
+        L.marker([s.lat, s.lng], { icon: dotIcon }).addTo(map).bindTooltip(s.id, { permanent: false });
     });
 
     let audioCtx;
@@ -68,7 +88,6 @@
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         document.getElementById('audio-btn').innerText = "AUDIO ON";
         document.getElementById('audio-btn').style.background = "#444";
-        document.getElementById('audio-btn').style.color = "#00ffcc";
     }
 
     function playChime() {
@@ -92,36 +111,11 @@
             const res = await fetch(proxy + encodeURIComponent(url));
             const text = await res.text();
             const val = parseFloat(text.trim().split('\n').pop());
-            // Sudden shake trigger
             if(!isNaN(val) && Math.abs(val) > 4800) trigger(14.601, 121.033);
         } catch (e) {}
         setTimeout(stream, 1000);
     }
 
     let active = false;
-    function trigger(lat, lng) {
-        if (active) return; active = true;
-        document.getElementById('alert-panel').style.display = 'block';
-        playChime();
-
-        const starIcon = L.divIcon({ html: "<div class='epicenter-star'>★</div>", className: '', iconSize:[0,0] });
-        const star = L.marker([lat, lng], {icon: starIcon}).addTo(map);
+    function trigger
         
-        const p = L.circle([lat, lng], { color: '#00ffcc', weight: 2, radius: 0 }).addTo(map);
-        const s = L.circle([lat, lng], { color: '#ff0000', weight: 3, radius: 0 }).addTo(map);
-
-        let pR = 0, sR = 0;
-        const anim = setInterval(() => {
-            pR += 6500; sR += 3500;
-            p.setRadius(pR); s.setRadius(sR);
-            if(pR > 800000) {
-                map.removeLayer(p); map.removeLayer(s); map.removeLayer(star);
-                document.getElementById('alert-panel').style.display = 'none';
-                active = false; clearInterval(anim);
-            }
-        }, 100);
-    }
-    stream();
-</script>
-</body>
-</html>
