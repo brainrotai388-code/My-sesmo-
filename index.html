@@ -1,103 +1,103 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>LIVE SYNC: AM.R716E</title>
+    <title>PH-EEW | SHAKENET LIVE</title>
     <style>
-        body { background: #fdfdfd; margin: 0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; overflow-x: hidden;}
-        #header { width: 100%; background: #222; color: #2ecc71; padding: 20px; font-weight: bold; text-align: left; font-size: 22px; max-width: 800px; box-sizing: border-box;}
-        canvas { background: white; width: 100%; max-width: 800px; height: auto; border: 1px solid #ddd; box-shadow: 0 2px 10px rgba(0,0,0,0.05);}
+        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: monospace; }
+        #map { position: absolute; width: 100%; height: 100%; filter: grayscale(1) invert(1) brightness(0.4); z-index: 1; }
+        #ui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; border: 2px solid #00ffcc; }
+        #header { background: rgba(0,0,0,0.9); color: #00ffcc; padding: 12px; border-bottom: 2px solid #00ffcc; }
+        
+        /* Epicenter Star */
+        .epicenter-star { color: #ff0000; font-size: 55px; text-shadow: 0 0 20px red; transform: translate(-50%, -50%); animation: flash 0.4s infinite; }
+        @keyframes flash { 0% { scale: 1.2; opacity: 1; } 50% { scale: 0.8; opacity: 0.4; } 100% { scale: 1.2; opacity: 1; } }
+        
+        #data-log { position: absolute; bottom: 10px; left: 10px; color: #00ffcc; font-size: 10px; background: rgba(0,0,0,0.7); padding: 5px; }
     </style>
 </head>
 <body>
-    <div id="header">● LIVE SYNC: AM.R716E</div>
-    <canvas id="seismoCanvas"></canvas>
 
-    <script>
-        const canvas = document.getElementById('seismoCanvas');
-        const ctx = canvas.getContext('2d');
-        const ROWS = 8;
-        const B = 400; // Increased points for a smoother, interconnected line
-        canvas.width = 1600; // Native canvas width
-        canvas.height = 1000;
+<div id="map"></div>
+<script async src="https://maps.googleapis.com/maps/api/js?key=DEVELOPMENT_ONLY&callback=initMap"></script>
+
+<div id="ui">
+    <div id="header">● PH-REQV | SHAKENET CONNECTED | STATION: AM.R716E</div>
+    <div id="data-log">FETCHING REAL-TIME DATA...</div>
+</div>
+
+<script>
+    let map;
+    let lastValue = 0;
+    const MY_STATION = "R716E";
+
+    // 1. SHAKENET LIVE CONNECTION
+    async function fetchLiveSeismic() {
+        const proxy = "https://api.allorigins.win/raw?url=";
+        const target = `https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=${MY_STATION}&loc=00&cha=SHZ&format=ascii&nodata=404`;
         
-        let history = Array.from({ length: ROWS }, () => new Array(B).fill(0));
-        let r_idx = 0; let c_idx = 0;
-
-        async function fetchData() {
-            try {
-                // Using the most stable proxy
-                const url = `https://api.allorigins.win/raw?url=${encodeURIComponent('https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404')}`;
-                const res = await fetch(url);
-                const txt = await res.text();
-                const lines = txt.trim().split('\n');
-                let val = parseFloat(lines[lines.length - 1]);
-
-                if (!isNaN(val)) {
-                    // HIGH GAIN: Scale values so small movements wiggles are prominent
-                    history[r_idx][c_idx] = val;
-                } else {
-                    // Simulate very subtle ambient ground noise if no data
-                    history[r_idx][c_idx] = (Math.random() - 0.5) * 50;
-                }
-            } catch (e) {
-                // Connection failure fallback (slight drift)
-                history[r_idx][c_idx] = (Math.random() - 0.5) * 20;
-            }
-
-            c_idx++;
-            if (c_idx >= B) {
-                c_idx = 0; row_idx++;
-                if (row_idx >= ROWS) { row_idx = 0; history = Array.from({ length: ROWS }, () => new Array(B).fill(0)); }
-            }
-            setTimeout(fetchData, 40); 
-        }
-
-        function draw() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let rh = canvas.height / ROWS;
-
-            for (let r = 0; r < ROWS; r++) {
-                let cy = (r * rh) + (rh / 2);
+        try {
+            const response = await fetch(proxy + encodeURIComponent(target));
+            const text = await response.text();
+            const lines = text.trim().split('\n');
+            const newestVal = parseFloat(lines[lines.length - 1]);
+            
+            if (!isNaN(newestVal)) {
+                lastValue = newestVal;
+                document.getElementById('data-log').innerText = `LIVE STREAM: AM.${MY_STATION} | VAL: ${newestVal.toFixed(0)}`;
                 
-                // Draw thin, dark horizontal baseline grids
-                ctx.strokeStyle = '#e0e0e0';
-                ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
-
-                // Draw the "Drum Scribe" INTERCONNECTED Jagged Lines
-                ctx.strokeStyle = '#1c2833'; // Matches the dark ink in the reference image
-                ctx.lineWidth = 2.5; // Thicker line for high contrast
-                ctx.beginPath();
-                
-                let startDrawing = false;
-
-                for (let i = 0; i < B; i++) {
-                    // Hide the future part of the line
-                    if (r === row_idx && i > col_idx) break;
-
-                    let x = i * (canvas.width / B);
-                    let val = history[r][i];
-                    
-                    // SCALE FIX: We make the amplitude calculation sensitive 
-                    // so the trace is jagged and distinct.
-                    let h = (val / 150) * (rh * 0.4); 
-
-                    if (!startDrawing) {
-                        ctx.moveTo(x, cy - h);
-                        startDrawing = true;
-                    } else {
-                        // This connects point A to point B, creating the jag
-                        ctx.lineTo(x, cy - h);
-                    }
+                // TRIGGER LOGIC: If a sudden spike > 5000 is detected
+                if (Math.abs(newestVal) > 5000) {
+                    triggerAlert(14.601, 121.033); // Trigger at San Juan coords
                 }
-                ctx.stroke();
             }
-            requestAnimationFrame(draw);
+        } catch (e) {
+            document.getElementById('data-log').innerText = "CONNECTION ERROR: SHAKENET TIMEOUT";
         }
+        setTimeout(fetchLiveSeismic, 500); // Check every half second
+    }
 
-        fetchData();
-        draw();
-    </script>
+    // 2. MAP & VISUALS
+    function initMap() {
+        map = new google.maps.Map(document.getElementById("map"), {
+            zoom: 7, center: { lat: 12.879, lng: 121.774 },
+            disableDefaultUI: true, styles: [{ "stylers": [{ "invert_lightness": true }] }]
+        });
+        fetchLiveSeismic();
+    }
+
+    function triggerAlert(lat, lng) {
+        // Show Star
+        const star = new google.maps.OverlayView();
+        star.onAdd = function() {
+            const div = document.createElement('div');
+            div.className = 'epicenter-star';
+            div.innerHTML = '★';
+            div.style.position = 'absolute';
+            this.getPanes().overlayLayer.appendChild(div);
+            this.div = div;
+        };
+        star.draw = function() {
+            const pos = this.getProjection().fromLatLngToDivPixel(new google.maps.LatLng(lat, lng));
+            this.div.style.left = pos.x + 'px';
+            this.div.style.top = pos.y + 'px';
+        };
+        star.setMap(map);
+        setTimeout(() => star.setMap(null), 10000);
+
+        // Expand P-Wave
+        let r = 0;
+        const circle = new google.maps.Circle({
+            map: map, center: { lat: lat, lng: lng },
+            strokeColor: "#00ffcc", strokeOpacity: 0.8, strokeWeight: 3,
+            fillColor: "#00ffcc", fillOpacity: 0.1, radius: 0
+        });
+
+        const anim = setInterval(() => {
+            r += 7000;
+            circle.setRadius(r);
+            if (r > 600000) { clearInterval(anim); circle.setMap(null); }
+        }, 100);
+    }
+</script>
 </body>
 </html>
