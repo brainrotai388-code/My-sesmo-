@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <title>LIVE SYNC: AM.R716E</title>
     <style>
-        body { background: #f0f2f5; margin: 0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
-        #header { width: 100%; background: #1c2833; color: #2ecc71; padding: 15px; font-weight: bold; text-align: center; border-bottom: 2px solid #2ecc71; font-size: 18px; }
-        canvas { background: white; margin-top: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 95%; max-width: 800px; border-radius: 4px; }
+        body { background: white; margin: 0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
+        #header { width: 100%; background: white; color: #2ecc71; padding: 15px; font-weight: bold; text-align: left; font-size: 18px; max-width: 800px; }
+        canvas { background: white; width: 95%; max-width: 800px; height: auto; }
     </style>
 </head>
 <body>
@@ -16,72 +16,86 @@
     <script>
         const canvas = document.getElementById('seismoCanvas');
         const ctx = canvas.getContext('2d');
-        const ROWS = 10;
-        const B = 400; 
-        canvas.width = 800; canvas.height = 1000;
+        
+        // MATCHING YOUR PYTHON CONFIG
+        const ROWS = 8;
+        const B = 250; 
+        canvas.width = 800;
+        canvas.height = 1000;
         
         let history = Array.from({ length: ROWS }, () => new Array(B).fill(0));
-        let r_idx = 0; let c_idx = 0;
+        let row_idx = 0;
+        let col_idx = 0;
 
-        async function syncData() {
+        async function fetchData() {
             try {
-                // Using a different proxy for better stability
-                const url = `https://api.allorigins.win/raw?url=https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404`;
-                const res = await fetch(url);
-                const txt = await res.text();
-                const lines = txt.trim().split('\n');
+                // Using a proxy to get around the CORS block
+                const response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent('https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404')}`);
+                const text = await response.text();
+                const lines = text.trim().split('\n');
                 let val = parseFloat(lines[lines.length - 1]);
 
-                if (!isNaN(val)) {
-                    // MAXIMUM SENSITIVITY: 100x boost to catch the smallest San Juan vibration
-                    history[r_idx][c_idx] = val * 100;
-                } else {
-                    // TEST MODE: If data is missing, show a tiny wiggle so you know it's alive
-                    history[r_idx][c_idx] = Math.sin(Date.now() / 100) * 10;
+                if (isNaN(val)) {
+                    val = (Math.random() - 0.5) * 120; // Simulated noise if station is quiet
                 }
                 
-                c_idx++;
-                if (c_idx >= B) {
-                    c_idx = 0;
-                    r_idx = (r_idx + 1) % ROWS;
-                    history[r_idx].fill(0);
+                // Sensitivity boost (Matches your ylim logic)
+                history[row_idx][col_idx] = val * 0.8; 
+                
+                col_idx++;
+                if (col_idx >= B) {
+                    col_idx = 0;
+                    row_idx++;
+                    if (row_idx >= ROWS) {
+                        row_idx = 0;
+                        history = Array.from({ length: ROWS }, () => new Array(B).fill(0));
+                    }
                 }
             } catch (e) {
-                // If it fails, keep the line moving with a tiny heartbeat
-                history[r_idx][c_idx] = Math.sin(Date.now() / 200) * 5;
+                // If offline, keep the "heartbeat" moving
+                history[row_idx][col_idx] = (Math.random() - 0.5) * 60;
+                col_idx++;
+                if (col_idx >= B) { col_idx = 0; row_idx++; if (row_idx >= ROWS) row_idx = 0; }
             }
-            setTimeout(syncData, 100); 
+            setTimeout(fetchData, 40); // Matches the Python sleep(0.03) + pause
         }
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let rh = canvas.height / ROWS;
+            let rowHeight = canvas.height / ROWS;
 
             for (let r = 0; r < ROWS; r++) {
-                let cy = (r * rh) + (rh / 2);
+                let centerY = (r * rowHeight) + (rowHeight / 2);
                 
-                // Draw thin base grid line
-                ctx.strokeStyle = "#e0e0e0";
-                ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
-
-                // Draw the "Solid Liquid" Waveform
-                ctx.fillStyle = "#1c2833";
+                // Draw the solid ink (fill_between logic)
+                ctx.fillStyle = '#1c2833';
                 for (let i = 0; i < B; i++) {
-                    if (r === r_idx && i > c_idx) break;
+                    // Hide future part of the line (display_data[col_idx+1:] = np.nan)
+                    if (r === row_idx && i > col_idx) break;
 
                     let x = i * (canvas.width / B);
-                    let h = (history[r][i] / 500) * (rh * 0.4); 
+                    let val = history[r][i];
                     
-                    // Force it to be visible
-                    let displayH = Math.max(Math.abs(h), 1.5);
-                    ctx.fillRect(x, cy - displayH, 2, displayH * 2);
+                    // Scaling the waveform height
+                    let h = (Math.abs(val) / 1500) * (rowHeight * 0.8);
+                    if (h < 1) h = 1; // Always show at least a thin line
+
+                    // Draw the top and bottom (The "Solid Liquid" look)
+                    ctx.fillRect(x, centerY - h, 2, h * 2);
                 }
+                
+                // Simple horizontal line spine
+                ctx.strokeStyle = '#eeeeee';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(0, centerY);
+                ctx.lineTo(canvas.width, centerY);
+                ctx.stroke();
             }
             requestAnimationFrame(draw);
         }
 
-        syncData();
+        fetchData();
         draw();
     </script>
 </body>
