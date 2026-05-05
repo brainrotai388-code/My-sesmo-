@@ -5,40 +5,38 @@
     <title>LIVE SYNC: AM.R716E</title>
     <style>
         body { background: #f0f2f5; margin: 0; display: flex; flex-direction: column; align-items: center; font-family: sans-serif; }
-        #header { width: 100%; background: #1c2833; color: #2ecc71; padding: 15px; font-weight: bold; text-align: center; border-bottom: 2px solid #2ecc71; font-size: 14px; }
+        #header { width: 100%; background: #1c2833; color: #2ecc71; padding: 15px; font-weight: bold; text-align: center; border-bottom: 2px solid #2ecc71; font-size: 18px; }
         canvas { background: white; margin-top: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 95%; max-width: 800px; border-radius: 4px; }
-        .info { color: #888; font-size: 10px; margin-top: 8px; text-transform: uppercase; letter-spacing: 1px; }
     </style>
 </head>
 <body>
     <div id="header">● LIVE SYNC: AM.R716E</div>
     <canvas id="seismoCanvas"></canvas>
-    <div class="info">High Sensitivity | Data via ShakeNet</div>
 
     <script>
         const canvas = document.getElementById('seismoCanvas');
         const ctx = canvas.getContext('2d');
         const ROWS = 10;
         const B = 400; 
-        
-        canvas.width = 800; 
-        canvas.height = 1000;
+        canvas.width = 800; canvas.height = 1000;
         
         let history = Array.from({ length: ROWS }, () => new Array(B).fill(0));
-        let r_idx = 0;
-        let c_idx = 0;
+        let r_idx = 0; let c_idx = 0;
 
         async function syncData() {
             try {
+                // The Proxy helps get the data through to your phone
                 const url = `https://corsproxy.io/?https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404`;
                 const res = await fetch(url);
                 const txt = await res.text();
                 const lines = txt.trim().split('\n');
-                const val = parseFloat(lines[lines.length - 1]);
+                
+                // Get the very last number from the data stream
+                let val = parseFloat(lines[lines.length - 1]);
 
                 if (!isNaN(val)) {
-                    // We multiply by 5 here to make the small movements visible
-                    history[r_idx][c_idx] = val * 5;
+                    // BOOSTED SENSITIVITY: We multiply by 50 to make small vibrations huge
+                    history[r_idx][c_idx] = val * 50;
                     c_idx++;
 
                     if (c_idx >= B) {
@@ -47,8 +45,8 @@
                         history[r_idx].fill(0);
                     }
                 }
-            } catch (e) {}
-            setTimeout(syncData, 50);
+            } catch (e) { console.log("Reconnecting..."); }
+            setTimeout(syncData, 100); 
         }
 
         function draw() {
@@ -58,27 +56,22 @@
             for (let r = 0; r < ROWS; r++) {
                 let cy = (r * rh) + (rh / 2);
                 
-                // Light gray grid line
-                ctx.strokeStyle = "#eeeeee";
+                // Draw thin gray base line
+                ctx.strokeStyle = "#dddddd";
                 ctx.lineWidth = 1;
                 ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
 
-                // Draw the "Solid Liquid" ink
+                // Draw the "Solid Liquid" Waveform
                 ctx.fillStyle = "#1c2833";
                 for (let i = 0; i < B; i++) {
                     if (r === r_idx && i > c_idx) break;
 
                     let x = i * (canvas.width / B);
-                    let val = history[r][i];
-                    // Adjusted scale so it stays within its row
-                    let h = (val / 500) * (rh * 0.45); 
+                    let h = (history[r][i] / 1000) * (rh * 0.4); 
 
-                    if (Math.abs(h) > 1) {
-                        ctx.fillRect(x, cy - Math.abs(h), 2, Math.abs(h) * 2);
-                    } else {
-                        // Keep a tiny dot so the line looks "active"
-                        ctx.fillRect(x, cy - 1, 2, 2);
-                    }
+                    // Ensure we always see at least a tiny 2px bump if there is signal
+                    let displayH = Math.max(Math.abs(h), 1);
+                    ctx.fillRect(x, cy - displayH, 2, displayH * 2);
                 }
             }
             requestAnimationFrame(draw);
