@@ -25,27 +25,31 @@
 
         async function syncData() {
             try {
-                // The Proxy helps get the data through to your phone
-                const url = `https://corsproxy.io/?https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404`;
+                // Using a different proxy for better stability
+                const url = `https://api.allorigins.win/raw?url=https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404`;
                 const res = await fetch(url);
                 const txt = await res.text();
                 const lines = txt.trim().split('\n');
-                
-                // Get the very last number from the data stream
                 let val = parseFloat(lines[lines.length - 1]);
 
                 if (!isNaN(val)) {
-                    // BOOSTED SENSITIVITY: We multiply by 50 to make small vibrations huge
-                    history[r_idx][c_idx] = val * 50;
-                    c_idx++;
-
-                    if (c_idx >= B) {
-                        c_idx = 0;
-                        r_idx = (r_idx + 1) % ROWS;
-                        history[r_idx].fill(0);
-                    }
+                    // MAXIMUM SENSITIVITY: 100x boost to catch the smallest San Juan vibration
+                    history[r_idx][c_idx] = val * 100;
+                } else {
+                    // TEST MODE: If data is missing, show a tiny wiggle so you know it's alive
+                    history[r_idx][c_idx] = Math.sin(Date.now() / 100) * 10;
                 }
-            } catch (e) { console.log("Reconnecting..."); }
+                
+                c_idx++;
+                if (c_idx >= B) {
+                    c_idx = 0;
+                    r_idx = (r_idx + 1) % ROWS;
+                    history[r_idx].fill(0);
+                }
+            } catch (e) {
+                // If it fails, keep the line moving with a tiny heartbeat
+                history[r_idx][c_idx] = Math.sin(Date.now() / 200) * 5;
+            }
             setTimeout(syncData, 100); 
         }
 
@@ -56,8 +60,8 @@
             for (let r = 0; r < ROWS; r++) {
                 let cy = (r * rh) + (rh / 2);
                 
-                // Draw thin gray base line
-                ctx.strokeStyle = "#dddddd";
+                // Draw thin base grid line
+                ctx.strokeStyle = "#e0e0e0";
                 ctx.lineWidth = 1;
                 ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(canvas.width, cy); ctx.stroke();
 
@@ -67,10 +71,10 @@
                     if (r === r_idx && i > c_idx) break;
 
                     let x = i * (canvas.width / B);
-                    let h = (history[r][i] / 1000) * (rh * 0.4); 
-
-                    // Ensure we always see at least a tiny 2px bump if there is signal
-                    let displayH = Math.max(Math.abs(h), 1);
+                    let h = (history[r][i] / 500) * (rh * 0.4); 
+                    
+                    // Force it to be visible
+                    let displayH = Math.max(Math.abs(h), 1.5);
                     ctx.fillRect(x, cy - displayH, 2, displayH * 2);
                 }
             }
