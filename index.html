@@ -1,28 +1,30 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>EARTHQUAKE VIEWER | STABLE BUILD</title>
+    <title>EARTHQUAKE VIEWER | STABLE</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: 'Inter', sans-serif; }
         #map { position: absolute; width: 100%; height: 100%; z-index: 1; background: #0b1621; }
         
-        /* Apply the Pro Dark/Teal look to the map */
-        .leaflet-layer { filter: invert(1) hue-rotate(180deg) brightness(0.4) contrast(1.3); }
+        /* FIXED: Lightened the map while keeping the "Hacker" look */
+        .leaflet-layer { 
+            filter: invert(1) hue-rotate(180deg) brightness(0.7) contrast(1.1); 
+        }
 
         #ui-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; pointer-events: none; border: 2px solid #00ffcc; box-sizing: border-box; }
         #top-bar { background: rgba(0, 0, 0, 0.9); color: #00ffcc; padding: 12px; border-bottom: 2px solid #00ffcc; display: flex; justify-content: space-between; pointer-events: auto; }
         
         #audio-btn { background: #00ffcc; color: black; border: none; padding: 5px 12px; font-weight: bold; cursor: pointer; border-radius: 4px; }
 
-        .epicenter-star { color: #ff0000; font-size: 60px; text-shadow: 0 0 25px red; position: absolute; transform: translate(-50%, -50%); animation: flash 0.4s infinite; }
-        @keyframes flash { 0% { scale: 1.3; opacity: 1; } 50% { scale: 0.8; opacity: 0.4; } 100% { scale: 1.3; opacity: 1; } }
+        /* Pulsing Epicenter Star */
+        .epicenter-star { color: #ff0000; font-size: 50px; text-shadow: 0 0 20px red; position: absolute; transform: translate(-50%, -50%); animation: flash 0.4s infinite; }
+        @keyframes flash { 0% { scale: 1.2; } 50% { scale: 0.8; } 100% { scale: 1.2; } }
 
         #alert-panel { 
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
             background: rgba(220, 0, 0, 0.95); color: white; padding: 30px; 
             border: 4px solid white; display: none; z-index: 5000; text-align: center;
-            box-shadow: 0 0 40px rgba(255,0,0,0.7);
         }
     </style>
 </head>
@@ -31,86 +33,94 @@
 <div id="map"></div>
 <div id="ui-frame">
     <div id="top-bar">
-        <span>● EARTHQUAKE VIEWER WEB | LIVE</span>
-        <button id="audio-btn" onclick="initAudio()">ACTIVATE SOUND</button>
+        <span>● EARTHQUAKE VIEWER WEB | STABLE</span>
+        <button id="audio-btn" onclick="initAudio()">ENABLE AUDIO</button>
     </div>
     <div id="alert-panel">
-        <h1 style="margin:0; font-size: 30px;">EARTHQUAKE ALERT</h1>
-        <p>EXPECT STRONG SHAKING</p>
+        <h1 style="margin:0;">EARTHQUAKE ALERT</h1>
+        <p>STRONG SHAKING EXPECTED</p>
     </div>
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <script>
-    // 1. Setup the Map (No Key Required)
     const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([12.879, 121.774], 6);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
-    let audioCtx;
-    const MY_STATION = "R716E";
+    // THE STATION DOTS (Backbone Sensors)
+    const stations = [
+        { id: "R716E", lat: 14.601, lng: 121.033 }, // San Juan
+        { id: "R4433", lat: 13.756, lng: 121.058 }, // Batangas
+        { id: "R2627", lat: 18.196, lng: 120.592 }, // Laoag
+        { id: "R6D50", lat: 10.315, lng: 123.885 }, // Cebu
+        { id: "RE8A8", lat: 8.454, lng: 124.631 }   // CDO
+    ];
 
+    stations.forEach(s => {
+        L.circleMarker([s.lat, s.lng], {
+            radius: 4, fillColor: "#00ffcc", color: "#fff", weight: 1, fillOpacity: 1
+        }).addTo(map).bindTooltip(s.id);
+    });
+
+    let audioCtx;
     function initAudio() {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        document.getElementById('audio-btn').innerText = "AUDIO READY";
+        document.getElementById('audio-btn').innerText = "AUDIO ON";
         document.getElementById('audio-btn').style.background = "#444";
         document.getElementById('audio-btn').style.color = "#00ffcc";
     }
 
-    // PHIVOLCS-Style Chime
     function playChime() {
         if (!audioCtx) return;
         const now = audioCtx.currentTime;
-        [0, 0.5, 1.0].forEach(delay => {
+        [0, 0.5, 1.0].forEach(d => {
             const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.frequency.setValueAtTime(960, now + delay);
-            gain.gain.setValueAtTime(0.4, now + delay);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + delay + 0.4);
-            osc.connect(gain); gain.connect(audioCtx.destination);
-            osc.start(now + delay); osc.stop(now + delay + 0.4);
+            const g = audioCtx.createGain();
+            osc.frequency.setValueAtTime(960, now + d);
+            g.gain.setValueAtTime(0.4, now + d);
+            g.gain.exponentialRampToValueAtTime(0.01, now + d + 0.4);
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(now + d); osc.stop(now + d + 0.4);
         });
     }
 
     async function stream() {
         const proxy = "https://api.allorigins.win/raw?url=";
-        const url = `https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=${MY_STATION}&loc=00&cha=SHZ&format=ascii&nodata=404`;
-        
+        const url = `https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404`;
         try {
             const res = await fetch(proxy + encodeURIComponent(url));
             const text = await res.text();
             const val = parseFloat(text.trim().split('\n').pop());
-            if(!isNaN(val) && Math.abs(val) > 4500) trigger(14.601, 121.033);
+            // Sudden shake trigger
+            if(!isNaN(val) && Math.abs(val) > 4800) trigger(14.601, 121.033);
         } catch (e) {}
         setTimeout(stream, 1000);
     }
 
-    let isTriggered = false;
+    let active = false;
     function trigger(lat, lng) {
-        if (isTriggered) return;
-        isTriggered = true;
-        
+        if (active) return; active = true;
         document.getElementById('alert-panel').style.display = 'block';
         playChime();
 
-        const star = L.divIcon({ html: "<div class='epicenter-star'>★</div>", className: '', iconSize:[0,0] });
-        const marker = L.marker([lat, lng], {icon: star}).addTo(map);
+        const starIcon = L.divIcon({ html: "<div class='epicenter-star'>★</div>", className: '', iconSize:[0,0] });
+        const star = L.marker([lat, lng], {icon: starIcon}).addTo(map);
         
-        const pWave = L.circle([lat, lng], { color: '#00ffcc', weight: 2, radius: 0 }).addTo(map);
-        const sWave = L.circle([lat, lng], { color: '#ff0000', weight: 3, radius: 0 }).addTo(map);
+        const p = L.circle([lat, lng], { color: '#00ffcc', weight: 2, radius: 0 }).addTo(map);
+        const s = L.circle([lat, lng], { color: '#ff0000', weight: 3, radius: 0 }).addTo(map);
 
         let pR = 0, sR = 0;
         const anim = setInterval(() => {
             pR += 6500; sR += 3500;
-            pWave.setRadius(pR); sWave.setRadius(sR);
+            p.setRadius(pR); s.setRadius(sR);
             if(pR > 800000) {
-                map.removeLayer(pWave); map.removeLayer(sWave); map.removeLayer(marker);
+                map.removeLayer(p); map.removeLayer(s); map.removeLayer(star);
                 document.getElementById('alert-panel').style.display = 'none';
-                isTriggered = false; clearInterval(anim);
+                active = false; clearInterval(anim);
             }
         }, 100);
     }
-
     stream();
 </script>
 </body>
