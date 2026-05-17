@@ -1,121 +1,121 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>PH-EEW | MONITOR STABLE</title>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Monitoring Dashboard</title>
     <style>
-        body, html { margin: 0; padding: 0; height: 100%; background: #000; overflow: hidden; font-family: 'Inter', sans-serif; }
-        #map { position: absolute; width: 100%; height: 100%; z-index: 1; background: #0b1621; }
-        
-        /* ADJUSTED: Brightened map and fixed contrast for visibility */
-        .leaflet-layer { 
-            filter: invert(100%) hue-rotate(180deg) brightness(1.2) contrast(0.8); 
+        body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
         }
-
-        #ui-frame { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1000; pointer-events: none; border: 2px solid #00ffcc; box-sizing: border-box; }
-        #top-bar { background: rgba(0, 0, 0, 0.9); color: #00ffcc; padding: 12px; border-bottom: 2px solid #00ffcc; display: flex; justify-content: space-between; pointer-events: auto; }
-        
-        #audio-btn { background: #00ffcc; color: black; border: none; padding: 5px 12px; font-weight: bold; cursor: pointer; border-radius: 4px; }
-
-        /* Station Pulse Animation */
-        .station-dot {
-            background: #00ffcc;
-            width: 10px; height: 10px;
-            border-radius: 50%;
-            border: 2px solid #fff;
-            box-shadow: 0 0 10px #00ffcc;
-            animation: station-pulse 2s infinite;
+        header {
+            background-color: #1f1f1f;
+            padding: 15px;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-bottom: 2px solid #333;
         }
-        @keyframes station-pulse {
-            0% { box-shadow: 0 0 0px #00ffcc; }
-            50% { box-shadow: 0 0 15px #00ffcc; }
-            100% { box-shadow: 0 0 0px #00ffcc; }
+        .main-container {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
         }
-
-        /* Epicenter Star */
-        .epicenter-star { color: #ff0000; font-size: 50px; text-shadow: 0 0 20px red; position: absolute; transform: translate(-50%, -50%); animation: flash 0.4s infinite; z-index: 2000; }
-        @keyframes flash { 0% { scale: 1.2; } 50% { scale: 0.8; } 100% { scale: 1.2; } }
-
-        #alert-panel { 
-            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-            background: rgba(220, 0, 0, 0.95); color: white; padding: 30px; 
-            border: 4px solid white; display: none; z-index: 5000; text-align: center;
+        .control-panel {
+            background-color: #1a1a1a;
+            margin: 15px;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid #292929;
+            text-align: center;
+        }
+        .btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 5px;
+            border-radius: 5px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .btn:hover {
+            background-color: #0056b3;
+        }
+        .file-input {
+            display: none;
+        }
+        .data-display {
+            flex: 1;
+            background-color: #1f1f1f;
+            margin: 0 15px 15px 15px;
+            border-radius: 8px;
+            padding: 15px;
+            font-family: monospace;
+            overflow-y: auto;
+            border: 1px solid #292929;
         }
     </style>
 </head>
 <body>
 
-<div id="map"></div>
-<div id="ui-frame">
-    <div id="top-bar">
-        <span>● EARTHQUAKE VIEWER WEB | STABLE</span>
-        <button id="audio-btn" onclick="initAudio()">ENABLE AUDIO</button>
+    <header>📡 STATION MONITORING INTERFACE</header>
+
+    <div class="main-container">
+        <div class="control-panel">
+            <h2>Hardware & Data Access</h2>
+            
+            <button class="btn" onclick="requestMic()">🎙️ Enable Microphone</button>
+            
+            <button class="btn" onclick="document.getElementById('fileLoader').click()">📂 Load Station Logs</button>
+            <input type="file" id="fileLoader" class="file-input" onchange="handleFile(this.files)">
+        </div>
+
+        <div class="data-display" id="logDisplay">
+            [SYSTEM INFO] Web interface ready.<br>
+        </div>
     </div>
-    <div id="alert-panel">
-        <h1 style="margin:0;">EARTHQUAKE ALERT</h1>
-        <p>STRONG SHAKING EXPECTED</p>
-    </div>
-</div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        function logMessage(text) {
+            const display = document.getElementById('logDisplay');
+            display.innerHTML += `[SYSTEM] ${text}<br>`;
+            display.scrollTop = display.scrollHeight;
+        }
 
-<script>
-    // Initialize Map
-    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView([14.6, 121.0], 8);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        // 1. Request Microphone Access
+        async function requestMic() {
+            try {
+                // This triggers the browser's built-in permission popup
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                logMessage("<span style='color: #00ff00;'>Microphone access GRANTED. Stream connected.</span>");
+                
+                // You can add your audio analysis processing logic here
+                
+            } catch (err) {
+                logMessage("<span style='color: #ff3333;'>Microphone access DENIED: " + err.message + "</span>");
+            }
+        }
 
-    // Station Data
-    const stations = [
-        { id: "R716E", lat: 14.601, lng: 121.033 }, // San Juan
-        { id: "R4433", lat: 13.756, lng: 121.058 }, // Batangas
-        { id: "R2627", lat: 18.196, lng: 120.592 }, // Laoag
-        { id: "R6D50", lat: 10.315, lng: 123.885 }, // Cebu
-        { id: "RE8A8", lat: 8.454, lng: 124.631 }   // CDO
-    ];
+        // 2. Request and Read Local Files
+        function handleFile(files) {
+            if (files.length === 0) return;
+            const file = files[0];
+            logMessage(`Loading file: <strong>${file.name}</strong> (${file.size} bytes)`);
 
-    // Add Pulsing Dots for each station
-    stations.forEach(s => {
-        const dotIcon = L.divIcon({
-            className: 'station-dot',
-            iconSize: [12, 12],
-            iconAnchor: [6, 6]
-        });
-        L.marker([s.lat, s.lng], { icon: dotIcon }).addTo(map).bindTooltip(s.id, { permanent: false });
-    });
-
-    let audioCtx;
-    function initAudio() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        document.getElementById('audio-btn').innerText = "AUDIO ON";
-        document.getElementById('audio-btn').style.background = "#444";
-    }
-
-    function playChime() {
-        if (!audioCtx) return;
-        const now = audioCtx.currentTime;
-        [0, 0.5, 1.0].forEach(d => {
-            const osc = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            osc.frequency.setValueAtTime(960, now + d);
-            g.gain.setValueAtTime(0.4, now + d);
-            g.gain.exponentialRampToValueAtTime(0.01, now + d + 0.4);
-            osc.connect(g); g.connect(audioCtx.destination);
-            osc.start(now + d); osc.stop(now + d + 0.4);
-        });
-    }
-
-    async function stream() {
-        const proxy = "https://api.allorigins.win/raw?url=";
-        const url = `https://data.raspberryshakedata.com/fdsnws/dataselect/1/query?net=AM&sta=R716E&loc=00&cha=SHZ&format=ascii&nodata=404`;
-        try {
-            const res = await fetch(proxy + encodeURIComponent(url));
-            const text = await res.text();
-            const val = parseFloat(text.trim().split('\n').pop());
-            if(!isNaN(val) && Math.abs(val) > 4800) trigger(14.601, 121.033);
-        } catch (e) {}
-        setTimeout(stream, 1000);
-    }
-
-    let active = false;
-    function trigger
-        
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                logMessage("<span style='color: #00ebff;'>File loaded successfully! Parsing data stream...</span>");
+                // The contents of the file are available here at: e.target.result
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
